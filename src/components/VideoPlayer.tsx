@@ -1,9 +1,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Play, Pause, Volume2, VolumeX } from "lucide-react";
-import { getVideoSources } from "@/services/animeApi";
+import { fetchEpisodeStreams, getVideoSources } from "@/services/animeApi";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import {
   Select,
   SelectContent,
@@ -28,18 +29,44 @@ const VideoPlayer = ({ animeId, episodeNumber, title }: VideoPlayerProps) => {
   const [sources, setSources] = useState<Array<{ quality: string; url: string }>>([]);
   const [currentQuality, setCurrentQuality] = useState("720p");
   const [isLoadingQuality, setIsLoadingQuality] = useState(false);
+  const [isLoadingVideo, setIsLoadingVideo] = useState(true);
   const [showControls, setShowControls] = useState(true);
   const controlsTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const sources = getVideoSources(animeId, episodeNumber);
-    setSources(sources);
+    const loadVideoSources = async () => {
+      setIsLoadingVideo(true);
+      try {
+        // Try fetching from the API first
+        const streamData = await fetchEpisodeStreams(animeId.toString(), episodeNumber);
+        
+        if (streamData && streamData.success && streamData.sources && streamData.sources.length > 0) {
+          setSources(streamData.sources);
+          const preferredQuality = streamData.sources.find(s => s.quality === "720p") || streamData.sources[0];
+          setCurrentQuality(preferredQuality.quality);
+        } else {
+          // Fall back to sample videos if API fails
+          const fallbackSources = getVideoSources(animeId, episodeNumber);
+          setSources(fallbackSources);
+          const preferredQuality = fallbackSources.find(s => s.quality === "720p") || fallbackSources[0];
+          setCurrentQuality(preferredQuality.quality);
+        }
+      } catch (error) {
+        console.error("Error loading video sources:", error);
+        toast.error("Failed to load video sources. Using fallback videos.");
+        
+        // Use fallback videos
+        const fallbackSources = getVideoSources(animeId, episodeNumber);
+        setSources(fallbackSources);
+        const preferredQuality = fallbackSources.find(s => s.quality === "720p") || fallbackSources[0];
+        setCurrentQuality(preferredQuality.quality);
+      } finally {
+        setIsLoadingVideo(false);
+      }
+    };
     
-    const initialSource = sources.find(s => s.quality === "720p") || sources[0];
-    if (initialSource) {
-      setCurrentQuality(initialSource.quality);
-    }
-
+    loadVideoSources();
+    
     // Cleanup timeout on unmount
     return () => {
       if (controlsTimeoutRef.current !== null) {
@@ -60,6 +87,7 @@ const VideoPlayer = ({ animeId, episodeNumber, title }: VideoPlayerProps) => {
     const onLoadedMetadata = () => {
       if (video) {
         setDuration(video.duration);
+        setIsLoadingVideo(false);
       }
     };
     
@@ -176,6 +204,8 @@ const VideoPlayer = ({ animeId, episodeNumber, title }: VideoPlayerProps) => {
     }, 3000);
   };
 
+  const currentSource = sources.find(s => s.quality === currentQuality);
+
   return (
     <div 
       className="relative w-full bg-black rounded-lg overflow-hidden"
@@ -186,23 +216,17 @@ const VideoPlayer = ({ animeId, episodeNumber, title }: VideoPlayerProps) => {
       <video
         ref={videoRef}
         className="w-full aspect-video"
-        poster={`https://via.placeholder.com/1280x720/121526/6C63FF?text=Episode+${episodeNumber}`}
+        poster={`https://via.placeholder.com/1280x720/121526/6C63FF?text=${title}+-+Episode+${episodeNumber}`}
         onClick={handlePlayPause}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
+        src={currentSource?.url}
       >
-        {sources.map((source) => (
-          <source 
-            key={source.quality} 
-            src={currentQuality === source.quality ? source.url : undefined} 
-            type="video/mp4" 
-          />
-        ))}
         Your browser does not support the video tag.
       </video>
 
       {/* Loading Indicator */}
-      {isLoadingQuality && (
+      {(isLoadingVideo || isLoadingQuality) && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
           <div className="w-12 h-12 border-4 border-kuro-500 border-t-transparent rounded-full animate-spin"></div>
         </div>
@@ -261,18 +285,20 @@ const VideoPlayer = ({ animeId, episodeNumber, title }: VideoPlayerProps) => {
           </div>
           
           <div className="flex items-center gap-2">
-            <Select value={currentQuality} onValueChange={handleQualityChange}>
-              <SelectTrigger className="w-[80px] h-8 text-xs bg-black/50 border-none">
-                <SelectValue placeholder="Quality" />
-              </SelectTrigger>
-              <SelectContent className="bg-card/95 backdrop-blur-sm">
-                {sources.map((source) => (
-                  <SelectItem key={source.quality} value={source.quality}>
-                    {source.quality}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {sources.length > 0 && (
+              <Select value={currentQuality} onValueChange={handleQualityChange}>
+                <SelectTrigger className="w-[80px] h-8 text-xs bg-black/50 border-none">
+                  <SelectValue placeholder="Quality" />
+                </SelectTrigger>
+                <SelectContent className="bg-card/95 backdrop-blur-sm">
+                  {sources.map((source) => (
+                    <SelectItem key={source.quality} value={source.quality}>
+                      {source.quality}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </div>
       </div>

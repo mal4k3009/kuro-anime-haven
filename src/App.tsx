@@ -10,6 +10,8 @@ import WatchPage from "./pages/WatchPage";
 import SearchPage from "./pages/SearchPage";
 import AnimeListPage from "./pages/AnimeListPage";
 import SeasonalAnimePage from "./pages/SeasonalAnimePage";
+import CategoryPage from "./pages/CategoryPage";
+import LegalPage from "./pages/LegalPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -34,6 +36,8 @@ const App = () => (
           <Route path="/watch/:id/:episode" element={<WatchPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/seasonal" element={<SeasonalAnimePage />} />
+          <Route path="/genre/:category" element={<CategoryPage />} />
+          <Route path="/:page" element={<LegalPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

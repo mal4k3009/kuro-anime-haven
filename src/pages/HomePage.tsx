@@ -1,14 +1,14 @@
 
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
-import HeroSection from "@/components/HeroSection";
+import HeroCarousel from "@/components/HeroCarousel";
 import AnimeSection from "@/components/AnimeSection";
 import NavBar from "@/components/NavBar";
 import Footer from "@/components/Footer";
 import { fetchTopAnime, fetchSeasonalAnime, Anime } from "@/services/animeApi";
 
 const HomePage = () => {
-  const [featuredAnime, setFeaturedAnime] = useState<Anime | null>(null);
+  const [featuredAnime, setFeaturedAnime] = useState<Anime[]>([]);
   const [topAnime, setTopAnime] = useState<Anime[]>([]);
   const [seasonalAnime, setSeasonalAnime] = useState<Anime[]>([]);
   const [isLoading, setIsLoading] = useState({
@@ -25,10 +25,8 @@ const HomePage = () => {
         const topResponse = await fetchTopAnime();
         setTopAnime(topResponse.data);
         
-        // Use the first anime as featured
-        if (topResponse.data.length > 0) {
-          setFeaturedAnime(topResponse.data[0]);
-        }
+        // Use top 5 anime as featured
+        setFeaturedAnime(topResponse.data.slice(0, 5));
         
         setIsLoading((prev) => ({ ...prev, featured: false, top: false }));
         
@@ -59,7 +57,10 @@ const HomePage = () => {
       <NavBar />
       
       <main className="flex-1">
-        <HeroSection anime={featuredAnime} />
+        <HeroCarousel 
+          animeList={featuredAnime} 
+          loading={isLoading.featured}
+        />
         
         <AnimeSection 
           title="Top Anime" 

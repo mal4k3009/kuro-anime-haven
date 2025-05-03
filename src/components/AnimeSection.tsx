@@ -4,6 +4,14 @@ import { ChevronRight } from "lucide-react";
 import AnimeCard from "./AnimeCard";
 import { Anime } from "@/services/animeApi";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 
 interface AnimeSectionProps {
   title: string;
@@ -18,6 +26,8 @@ const AnimeSection = ({
   viewAllLink, 
   loading = false 
 }: AnimeSectionProps) => {
+  const isMobile = useIsMobile();
+
   return (
     <section className="py-8">
       <div className="container px-4 mx-auto">
@@ -44,15 +54,26 @@ const AnimeSection = ({
             ))}
           </div>
         ) : (
-          <ScrollArea className="w-full whitespace-nowrap pb-4">
-            <div className="flex space-x-4">
+          <Carousel className="w-full">
+            <CarouselContent className="-ml-2 md:-ml-4">
               {anime.map((item) => (
-                <div key={item.mal_id} className="w-[250px] max-w-[90vw] flex-shrink-0">
-                  <AnimeCard anime={item} />
-                </div>
+                <CarouselItem 
+                  key={item.mal_id} 
+                  className="pl-2 md:pl-4 basis-1/2 md:basis-1/3 lg:basis-1/5"
+                >
+                  <div className="h-full">
+                    <AnimeCard anime={item} />
+                  </div>
+                </CarouselItem>
               ))}
-            </div>
-          </ScrollArea>
+            </CarouselContent>
+            {!isMobile && (
+              <>
+                <CarouselPrevious className="hidden md:flex" />
+                <CarouselNext className="hidden md:flex" />
+              </>
+            )}
+          </Carousel>
         )}
       </div>
     </section>
