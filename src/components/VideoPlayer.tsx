@@ -32,24 +32,46 @@ const VideoPlayer = ({ animeId, episodeNumber, title }: VideoPlayerProps) => {
   const [isLoadingVideo, setIsLoadingVideo] = useState(true);
   const [showControls, setShowControls] = useState(true);
   const controlsTimeoutRef = useRef<number | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState("Loading video sources...");
 
   useEffect(() => {
     const loadVideoSources = async () => {
       setIsLoadingVideo(true);
+      setLoadingMessage("Searching for episode sources...");
+      
       try {
-        // Try fetching from the API first
+        // First try to get the real stream from the API
         const streamData = await fetchEpisodeStreams(animeId.toString(), episodeNumber);
         
         if (streamData && streamData.success && streamData.sources && streamData.sources.length > 0) {
+          setLoadingMessage("Stream found! Loading video...");
+          console.log("Found real streams for", title, "episode", episodeNumber);
           setSources(streamData.sources);
-          const preferredQuality = streamData.sources.find(s => s.quality === "720p") || streamData.sources[0];
+          
+          // Sort sources by quality (higher number = better quality)
+          const sortedSources = [...streamData.sources].sort((a, b) => {
+            const qualityA = parseInt(a.quality.replace('p', '')) || 0;
+            const qualityB = parseInt(b.quality.replace('p', '')) || 0;
+            return qualityB - qualityA;
+          });
+          
+          // Find the best quality that's not too high (prefer 720p if available)
+          const preferredQuality = sortedSources.find(s => s.quality === "720p") || 
+                                  sortedSources.find(s => s.quality === "480p") ||
+                                  sortedSources[0];
+          
           setCurrentQuality(preferredQuality.quality);
         } else {
           // Fall back to sample videos if API fails
+          setLoadingMessage("Using fallback video...");
+          console.log("No streams found, using fallbacks for", title, "episode", episodeNumber);
           const fallbackSources = getVideoSources(animeId, episodeNumber);
           setSources(fallbackSources);
           const preferredQuality = fallbackSources.find(s => s.quality === "720p") || fallbackSources[0];
           setCurrentQuality(preferredQuality.quality);
+          toast.warning("Using fallback video for this episode", {
+            description: "Could not find the actual episode stream. Playing a sample video instead."
+          });
         }
       } catch (error) {
         console.error("Error loading video sources:", error);
@@ -73,7 +95,7 @@ const VideoPlayer = ({ animeId, episodeNumber, title }: VideoPlayerProps) => {
         window.clearTimeout(controlsTimeoutRef.current);
       }
     };
-  }, [animeId, episodeNumber]);
+  }, [animeId, episodeNumber, title]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -227,8 +249,9 @@ const VideoPlayer = ({ animeId, episodeNumber, title }: VideoPlayerProps) => {
 
       {/* Loading Indicator */}
       {(isLoadingVideo || isLoadingQuality) && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
-          <div className="w-12 h-12 border-4 border-kuro-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 z-10">
+          <div className="w-12 h-12 border-4 border-kuro-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-white text-center px-4">{loadingMessage}</p>
         </div>
       )}
 

@@ -2,6 +2,7 @@
 // Using the Jikan API (MyAnimeList API) for anime data
 const BASE_URL = 'https://api.jikan.moe/v4';
 const ANIME_API_URL = 'https://api-amvstrm.nyt92.eu.org/api/v2';
+const ANIME_STREAMING_API = 'https://api.amvstr.me/api/v2';
 
 // Basic rate limiting helper to avoid API rejection
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -121,16 +122,39 @@ export const searchAnime = async (query: string, page = 1): Promise<AnimeRespons
   return await response.json();
 };
 
-// Get episode streams from the API
+// Get real episode streams from the API
 export const fetchEpisodeStreams = async (animeId: string, episodeNumber: number): Promise<StreamResponse | null> => {
   try {
     await delay(100);
-    // Try to fetch from the amvstrm API - this is a best effort attempt
-    const response = await fetch(`${ANIME_API_URL}/stream/${animeId}/${episodeNumber}`);
+    // First try using the main amvstr.me API
+    let response = await fetch(`${ANIME_STREAMING_API}/stream/${animeId}/${episodeNumber}`);
+    
+    // If that fails, try the backup API
+    if (!response.ok) {
+      response = await fetch(`${ANIME_API_URL}/stream/${animeId}/${episodeNumber}`);
+    }
     
     if (response.ok) {
-      return await response.json();
+      const data = await response.json();
+      if (data.sources && data.sources.length > 0) {
+        return data;
+      }
     }
+    
+    // If both APIs fail or return no sources, try to get the anime ID in consumet format
+    const consumetId = await getConsumableAnimeId(parseInt(animeId));
+    if (consumetId) {
+      response = await fetch(`${ANIME_STREAMING_API}/stream/${consumetId}/${episodeNumber}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.sources && data.sources.length > 0) {
+          return data;
+        }
+      }
+    }
+    
+    // If all API attempts fail, fall back to sample videos
     return null;
   } catch (error) {
     console.error("Error fetching episode streams:", error);
@@ -138,22 +162,61 @@ export const fetchEpisodeStreams = async (animeId: string, episodeNumber: number
   }
 };
 
+// Function to map MAL IDs to consumable API IDs
+const getConsumableAnimeId = async (malId: number): Promise<string | null> => {
+  try {
+    // First try direct mapping
+    const directMapping = getAnimeProviderId(malId);
+    if (directMapping) return directMapping;
+    
+    // If that doesn't work, try to search for the anime by details
+    const animeDetails = await fetchAnimeDetails(malId);
+    if (!animeDetails || !animeDetails.data) return null;
+    
+    const title = animeDetails.data.title_english || animeDetails.data.title;
+    // Convert title to slug format: lowercase, replace spaces with hyphens, remove special characters
+    const slug = title
+      .toLowerCase()
+      .replace(/[^\w\s]/gi, '')
+      .replace(/\s+/g, '-');
+    
+    return slug;
+  } catch (error) {
+    console.error("Error getting consumable anime ID:", error);
+    return null;
+  }
+};
+
 // Function to convert MAL ID to a consumet/anify API compatible ID 
-// This is a mock function as we'd need a mapping database in a real app
-const getAnimeProviderId = (malId: number): string => {
-  // In a real app, we'd look up this mapping in a database
-  // For now, let's create some mock mappings for demo purposes
-  const mockMappings: Record<number, string> = {
-    5114: "hunter-x-hunter-2011", // Hunter x Hunter
-    21: "one-piece",              // One Piece
-    1535: "death-note",           // Death Note
-    30276: "one-punch-man",       // One Punch Man
-    38000: "demon-slayer",        // Demon Slayer
-    9253: "steins-gate",          // Steins Gate
-    31964: "my-hero-academia",    // My Hero Academia
+const getAnimeProviderId = (malId: number): string | null => {
+  // More extensive mapping of popular anime
+  const mappings: Record<number, string> = {
+    5114: "fullmetal-alchemist-brotherhood", // Fullmetal Alchemist: Brotherhood
+    21: "one-piece",                        // One Piece
+    1735: "naruto",                         // Naruto
+    20: "naruto-shippuden",                 // Naruto Shippuuden
+    1535: "death-note",                     // Death Note
+    30276: "one-punch-man",                 // One Punch Man
+    38000: "demon-slayer-kimetsu-no-yaiba", // Demon Slayer
+    9253: "steins-gate",                    // Steins Gate
+    31964: "my-hero-academia",              // My Hero Academia
+    16498: "attack-on-titan",               // Attack on Titan
+    40028: "jujutsu-kaisen",                // Jujutsu Kaisen
+    11061: "hunter-x-hunter-2011",          // Hunter x Hunter (2011)
+    11757: "sword-art-online",              // Sword Art Online
+    269: "bleach",                          // Bleach
+    47778: "chainsaw-man",                  // Chainsaw Man
+    37991: "jojos-bizarre-adventure-golden-wind", // JoJo's Bizarre Adventure: Golden Wind
+    34134: "one-punch-man-2",               // One Punch Man 2
+    35760: "my-hero-academia-season-3",     // My Hero Academia 3
+    43555: "dr-stone-stone-wars",           // Dr. Stone: Stone Wars
+    48583: "shingeki-no-kyojin-the-final-season", // Attack on Titan: Final Season
+    52991: "frieren-beyond-journeys-end",   // Frieren
+    51805: "blue-lock",                     // Blue Lock
+    51009: "spy-x-family",                  // Spy x Family
   };
   
-  return mockMappings[malId] || `anime-${malId}`;
+  return mappings[malId] || null;
 };
 
 // This is a fallback for video sources
